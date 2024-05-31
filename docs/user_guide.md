@@ -16,14 +16,14 @@ Crie e ative um ambiente virtual (recomendado usar Python 3.8 ou superior).
 
     python -m venv .venv
 
-    .venv\Scripts\activate  # Para Windows
+    .venv/Scripts/activate  # Para Windows
 
     source .venv/bin/activate  # Para Linux/MacOS
 
 ### 3 - Instalar as dependências
 Instale as dependências do projeto.
 
-    pip install -r requirements.txt
+    pip install -r docs/requirements.txt
 
 
 ### 4 - Abrir o terminal de comando e inserir o codigo abaixo para start no Frontend local
