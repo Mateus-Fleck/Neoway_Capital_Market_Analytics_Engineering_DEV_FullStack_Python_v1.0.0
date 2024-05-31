@@ -1,0 +1,25 @@
+# Ignore a Maquina Virtual
+.venv/
+
+# Ignore a pasta de credenciais do google credentials_private_key_gbq
+docs/credentials_private_key_gbq
+
+# Ignore arquivos da pasta de camadas raw, silver e gold.
+src/backend/data/1_raw/raw_wallet_br.csv
+src/backend/data/1_raw/raw_historical_stock_price_br.csv
+
+src/backend/data/2_silver/silver_wallet_br.csv
+src/backend/data/2_silver/silver_historical_stock_price_br.csv
+
+src/backend/data/3_gold/gold_dim_wallet_br.csv
+src/backend/data/3_gold/gold_fact_historical_stock_price_br.csv
+
+# Ignore pastas com scripts de test
+src/backend/1_extract/DEV_TEST
+src/backend/2_transform/DEV_TEST
+src/backend/3_load/DEV_TEST
+src/frontend/DEV_TEST
+
+# Ignore arquivos relacionados às chaves de API
+.env/
+

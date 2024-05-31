@@ -1,0 +1,72 @@
+/* styles.css */
+
+body {
+    background-color: #2e2e2e; /* Fundo escuro */
+    color: #ffffff; /* Texto branco */
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: #ffffff;
+}
+
+.sidebar .sidebar-content {
+    background-color: #333333;
+}
+
+.stButton > button {
+    color: #ffffff;
+    background-color: #008080;
+    border-color: #008080;
+}
+
+.stButton > button:hover {
+    background-color: #004d4d;
+    border-color: #004d4d;
+}
+
+/* Estilos para os cards */
+.card {
+    border: 2px solid #cccccc;
+    border-radius: 5px;
+    padding: 15px;
+    margin-right: 10px;
+    flex: 1;
+    background-color: #333333;
+    color: #ffffff;
+    margin-bottom: 10px;
+}
+
+.card-value {
+    font-size: 24px;
+    margin-bottom: 5px;
+}
+
+.card-title {
+    font-size: 18px;
+    color: #ffffff;
+}
+
+/* Estilos específicos para diferentes tipos de cards */
+.card-open {
+    border-color: #cccccc;
+    background-color: #333333;
+    color: #ffffff;
+}
+
+.card-close {
+    border-color: #00b0e6;
+    background-color: #333333;
+    color: #00b0e6;
+}
+
+.card-high {
+    border-color: #008000;
+    background-color: #333333;
+    color: green;
+}
+
+.card-low {
+    border-color: #ff0000;
+    background-color: #333333;
+    color: red;
+}
