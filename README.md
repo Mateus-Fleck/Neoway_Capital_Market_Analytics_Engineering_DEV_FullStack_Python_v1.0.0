@@ -29,17 +29,13 @@
 2.2. **PRESENTATION**
 - [X] Criar tabela com os dados extraídos;
 
-
 2.3. **FILTERs**
 - [X] Criar filtros de ticker, data, segmento e setor;
 
-
 # Neoway - Uma empresa B3
-
 
 # SOLUTION
 
 VERSION app_v1.0.0
 
-Print Solution
-
+![Print Solution](https://github.com/Mateus-Fleck/Neoway_Capital_Market_Analytics_Engineering_DEV_FullStack_Python_v1.0.0/blob/main/src/frontend/assets/imgs/Print_Solution_app_v1/Print_Solution_v2.jpg)
