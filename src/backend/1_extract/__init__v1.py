@@ -6,18 +6,20 @@ import yfinance as yf
 from google.cloud import bigquery
 from google.oauth2 import service_account
 from google.api_core.exceptions import NotFound
+from multiprocessing import Pool
 
 # Configuração da autenticação do GCP
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "docs/credentials_private_key_gbq/fluent-outpost-424800-h1-81323e8da89e.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials/credentials_private_key_gbq/GBQ.json"
 credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # Define os caminhos para salvar os arquivos CSV
 output_directory = os.path.join(os.getcwd(), 'src', 'backend', 'data', '1_raw')
 wallet_br_path = os.path.join(output_directory, 'raw_wallet_br.csv')
 historical_stock_price_br_path = os.path.join(output_directory, 'raw_historical_stock_price_br.csv')
+address_path = os.path.join(output_directory, 'raw_address.csv')
 
-def persist_to_bigquery_and_local(df, table_id, local_path, credentials_path):
-    """Persiste o DataFrame no BigQuery e salva localmente."""
+def persist_to_bigquery(df, table_id, credentials_path):
+    """Persiste o DataFrame no BigQuery."""
     credentials = service_account.Credentials.from_service_account_file(credentials_path)
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     try:
@@ -28,8 +30,9 @@ def persist_to_bigquery_and_local(df, table_id, local_path, credentials_path):
         print(f"Tabela não encontrada: {e}")
     except Exception as e:
         print(f"Erro ao persistir dados no BigQuery: {e}")
-    
-    # Salvar localmente
+
+def save_to_local(df, local_path):
+    """Salva o DataFrame localmente."""
     df.to_csv(local_path, index=False)
     print(f"Dados salvos localmente em {local_path}")
 
@@ -54,33 +57,60 @@ def create_wallet_df(df, tickers):
     wallet_br['snome'] = wallet_br['symbol'] + '-' + wallet_br['name']
     return wallet_br
 
-def get_stock_info(tickers):
-    """Obtém informações de setor e indústria com tratamento de exceções."""
-    print("Obtendo informações de setor e indústria das ações...")
-    data = []
+def get_stock_info_parallel(ticker):
+    """Obtém informações de setor e indústria com tratamento de exceções para um ticker."""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        return {
+            'ticker': ticker,
+            'sector': info.get('sector', 'N/A'),
+            'industry': info.get('industry', 'N/A'),
+            'longBusinessSummary': info.get('longBusinessSummary', 'N/A'),
+            'address': info.get('address1', '') + ' ' + info.get('address2', ''),
+            'city': info.get('city', 'N/A'),
+            'state': info.get('state', 'N/A'),
+            'zip': info.get('zip', 'N/A'),
+            'country': info.get('country', 'N/A'),
+            'website': info.get('website', 'N/A')
+        }
+    except Exception as e:
+        print(f"Erro ao obter informações para {ticker}: {e}")
+        return {
+            'ticker': ticker,
+            'sector': 'N/A',
+            'industry': 'N/A',
+            'longBusinessSummary': 'N/A',
+            'address': 'N/A',
+            'city': 'N/A',
+            'state': 'N/A',
+            'zip': 'N/A',
+            'country': 'N/A',
+            'website': 'N/A'
+        }
+
+def get_stock_info_parallel_wrapper(ticker):
+    """Wrapper para a função get_stock_info_parallel para lidar com exceções."""
+    try:
+        return get_stock_info_parallel(ticker)
+    except Exception as e:
+        print(f"Erro ao processar {ticker}: {e}")
+
+def get_stock_info_parallelized(tickers):
+    """Obtém informações de setor e indústria para todos os tickers em paralelo."""
+    print("Obtendo informações de setor e indústria das ações em paralelo...")
     start_time = time.time()
-    for i, ticker in enumerate(tickers, 1):
-        try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            data.append({
-                'ticker': ticker,
-                'sector': info.get('sector', 'N/A'),
-                'industry': info.get('industry', 'N/A')
-            })
-        except Exception as e:
-            print(f"Erro ao obter informações para {ticker}: {e}")
-            data.append({
-                'ticker': ticker,
-                'sector': 'N/A',
-                'industry': 'N/A'
-            })
-        print(f"Processo {i}/{len(tickers)} concluído. Tempo estimado restante: {(len(tickers)-i)*0.5:.2f} segundos")
-        if i % 5 == 0:  # Reduz a frequência de espera para ser mais rápido
-            time.sleep(0.5)
+    total_processes = len(tickers)
+    with Pool() as pool:
+        data = []
+        for i, result in enumerate(pool.imap_unordered(get_stock_info_parallel_wrapper, tickers), 1):
+            data.append(result)
+            remaining_time = (total_processes - i) * (time.time() - start_time) / i
+            print(f"Processo {i}/{total_processes} concluído. Tempo estimado restante: {remaining_time:.2f} segundos")
     end_time = time.time()
     print(f"Tempo total de execução: {end_time - start_time:.2f} segundos")
     return pd.DataFrame(data)
+
 
 def merge_stock_info(wallet_df, stock_info_df):
     """Junta as informações de setor e indústria ao DataFrame original."""
@@ -88,6 +118,10 @@ def merge_stock_info(wallet_df, stock_info_df):
     start_time = time.time()
     merged_df = wallet_df.merge(stock_info_df, left_on='ticker_br', right_on='ticker', how='left')
     merged_df.drop(columns=['ticker'], inplace=True)
+    
+    # Adiciona a coluna 'country' ao DataFrame original para evitar o erro
+    merged_df['country'] = 'Brazil'
+    
     merged_df['research_cnpj'] = merged_df['full_name'] + ' - CNPJ'
     
     # Limpar as colunas name e full_name
@@ -136,8 +170,8 @@ def merge_stock_info(wallet_df, stock_info_df):
     print(f"Tempo de execução: {end_time - start_time:.2f} segundos")
     return merged_df
 
-def get_historical_data(ticker):
-    """Obtém as cotações históricas dos últimos 6 meses."""
+def get_historical_data_parallel(ticker):
+    """Obtém as cotações históricas dos últimos 6 meses para um ticker."""
     print(f"Obtendo cotações históricas para {ticker}...")
     try:
         stock = yf.Ticker(ticker)
@@ -151,15 +185,27 @@ def get_historical_data(ticker):
         print(f"Erro ao obter cotações para {ticker}: {e}")
         return pd.DataFrame()
 
-def get_all_historical_data(tickers):
-    """Obtém as cotações históricas para todos os tickers e as combina em um único DataFrame."""
-    print("Obtendo cotações históricas para todas as ações...")
+def get_historical_data_parallel_wrapper(ticker):
+    """Wrapper para a função get_historical_data_parallel para lidar com exceções."""
+    try:
+        return get_historical_data_parallel(ticker)
+    except Exception as e:
+        print(f"Erro ao processar {ticker}: {e}")
+
+def get_all_historical_data_parallel(tickers):
+    """Obtém as cotações históricas para todos os tickers em paralelo."""
+    print("Obtendo cotações históricas para todas as ações em paralelo...")
     start_time = time.time()
-    all_stocks_hist = pd.concat([get_historical_data(ticker) for ticker in tickers], axis=0)
-    all_stocks_hist.reset_index(inplace=True)
+    total_processes = len(tickers)
+    with Pool() as pool:
+        data = []
+        for i, result in enumerate(pool.imap_unordered(get_historical_data_parallel_wrapper, tickers), 1):
+            data.append(result)
+            remaining_time = (total_processes - i) * (time.time() - start_time) / i
+            print(f"Processo {i}/{total_processes} concluído. Tempo estimado restante: {remaining_time:.2f} segundos")
     end_time = time.time()
     print(f"Tempo total de execução: {end_time - start_time:.2f} segundos")
-    return all_stocks_hist[['Date', 'ticker', 'Open', 'High', 'Low', 'Close', 'Volume']]
+    return pd.concat(data, axis=0)
 
 def main():
     # Verifica se o diretório de output existe e, se não, cria
@@ -176,16 +222,18 @@ def main():
         br_stocks = get_brazil_stocks()
         ticker_br = format_tickers(br_stocks)
         wallet_br = create_wallet_df(br_stocks, ticker_br)
-        stock_info = get_stock_info(wallet_br['ticker_br'])
+        stock_info = get_stock_info_parallelized(wallet_br['ticker_br'])
         wallet_br = merge_stock_info(wallet_br, stock_info)
-        historical_stock_price_br = get_all_historical_data(wallet_br['ticker_br'])
+        historical_stock_price_br = get_all_historical_data_parallel(wallet_br['ticker_br'])
         end_time = time.time()
-        print(f"Tempo total de extração: {end_time - start_time:.2f} segundos")
+        print(f"Tempo total de         execução: {end_time - start_time:.2f} segundos")
 
         # Passo 3: Salvamento dos arquivos CSV e no BigQuery
         start_time = time.time()
-        persist_to_bigquery_and_local(wallet_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_wallet_br', wallet_br_path, credentials_path)
-        persist_to_bigquery_and_local(historical_stock_price_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_historical_stock_price_br', historical_stock_price_br_path, credentials_path)
+        save_to_local(wallet_br, wallet_br_path)
+        save_to_local(historical_stock_price_br, historical_stock_price_br_path)
+        persist_to_bigquery(wallet_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_wallet_br', credentials_path)
+        persist_to_bigquery(historical_stock_price_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_historical_stock_price_br', credentials_path)
         end_time = time.time()
         print(f"Tempo total de persistência: {end_time - start_time:.2f} segundos")
 

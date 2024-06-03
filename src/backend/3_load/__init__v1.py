@@ -5,7 +5,7 @@ from google.oauth2 import service_account
 import time
 
 # Configuração da autenticação do GCP
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "docs/credentials_private_key_gbq/fluent-outpost-424800-h1-81323e8da89e.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials/credentials_private_key_gbq/GBQ.json"
 credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 def load_from_bigquery(query, credentials_path):
