@@ -16,10 +16,9 @@ credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 output_directory = os.path.join(os.getcwd(), 'src', 'backend', 'data', '1_raw')
 wallet_br_path = os.path.join(output_directory, 'raw_wallet_br.csv')
 historical_stock_price_br_path = os.path.join(output_directory, 'raw_historical_stock_price_br.csv')
-address_path = os.path.join(output_directory, 'raw_address.csv')
 
-def persist_to_bigquery(df, table_id, credentials_path):
-    """Persiste o DataFrame no BigQuery."""
+def persist_to_bigquery_and_local(df, table_id, local_path, credentials_path):
+    """Persiste o DataFrame no BigQuery e salva localmente."""
     credentials = service_account.Credentials.from_service_account_file(credentials_path)
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     try:
@@ -30,9 +29,8 @@ def persist_to_bigquery(df, table_id, credentials_path):
         print(f"Tabela não encontrada: {e}")
     except Exception as e:
         print(f"Erro ao persistir dados no BigQuery: {e}")
-
-def save_to_local(df, local_path):
-    """Salva o DataFrame localmente."""
+    
+    # Salvar localmente
     df.to_csv(local_path, index=False)
     print(f"Dados salvos localmente em {local_path}")
 
@@ -65,28 +63,14 @@ def get_stock_info_parallel(ticker):
         return {
             'ticker': ticker,
             'sector': info.get('sector', 'N/A'),
-            'industry': info.get('industry', 'N/A'),
-            'longBusinessSummary': info.get('longBusinessSummary', 'N/A'),
-            'address': info.get('address1', '') + ' ' + info.get('address2', ''),
-            'city': info.get('city', 'N/A'),
-            'state': info.get('state', 'N/A'),
-            'zip': info.get('zip', 'N/A'),
-            'country': info.get('country', 'N/A'),
-            'website': info.get('website', 'N/A')
+            'industry': info.get('industry', 'N/A')
         }
     except Exception as e:
         print(f"Erro ao obter informações para {ticker}: {e}")
         return {
             'ticker': ticker,
             'sector': 'N/A',
-            'industry': 'N/A',
-            'longBusinessSummary': 'N/A',
-            'address': 'N/A',
-            'city': 'N/A',
-            'state': 'N/A',
-            'zip': 'N/A',
-            'country': 'N/A',
-            'website': 'N/A'
+            'industry': 'N/A'
         }
 
 def get_stock_info_parallel_wrapper(ticker):
@@ -100,17 +84,11 @@ def get_stock_info_parallelized(tickers):
     """Obtém informações de setor e indústria para todos os tickers em paralelo."""
     print("Obtendo informações de setor e indústria das ações em paralelo...")
     start_time = time.time()
-    total_processes = len(tickers)
     with Pool() as pool:
-        data = []
-        for i, result in enumerate(pool.imap_unordered(get_stock_info_parallel_wrapper, tickers), 1):
-            data.append(result)
-            remaining_time = (total_processes - i) * (time.time() - start_time) / i
-            print(f"Processo {i}/{total_processes} concluído. Tempo estimado restante: {remaining_time:.2f} segundos")
+        data = pool.map(get_stock_info_parallel_wrapper, tickers)
     end_time = time.time()
     print(f"Tempo total de execução: {end_time - start_time:.2f} segundos")
     return pd.DataFrame(data)
-
 
 def merge_stock_info(wallet_df, stock_info_df):
     """Junta as informações de setor e indústria ao DataFrame original."""
@@ -118,10 +96,6 @@ def merge_stock_info(wallet_df, stock_info_df):
     start_time = time.time()
     merged_df = wallet_df.merge(stock_info_df, left_on='ticker_br', right_on='ticker', how='left')
     merged_df.drop(columns=['ticker'], inplace=True)
-    
-    # Adiciona a coluna 'country' ao DataFrame original para evitar o erro
-    merged_df['country'] = 'Brazil'
-    
     merged_df['research_cnpj'] = merged_df['full_name'] + ' - CNPJ'
     
     # Limpar as colunas name e full_name
@@ -162,7 +136,7 @@ def merge_stock_info(wallet_df, stock_info_df):
         '56': 'Ações Preferenciais Diferenciadas de Dividendos Prioritários'
     })
     
-    # Reorganizar as colunas
+        # Reorganizar as colunas
     final_columns = ['country', 'name', 'full_name', 'symbol', 'ticker_br', 'snome', 'sector', 'industry', 'class_exchange', 'research_cnpj']
     merged_df = merged_df[final_columns]
     
@@ -196,13 +170,8 @@ def get_all_historical_data_parallel(tickers):
     """Obtém as cotações históricas para todos os tickers em paralelo."""
     print("Obtendo cotações históricas para todas as ações em paralelo...")
     start_time = time.time()
-    total_processes = len(tickers)
     with Pool() as pool:
-        data = []
-        for i, result in enumerate(pool.imap_unordered(get_historical_data_parallel_wrapper, tickers), 1):
-            data.append(result)
-            remaining_time = (total_processes - i) * (time.time() - start_time) / i
-            print(f"Processo {i}/{total_processes} concluído. Tempo estimado restante: {remaining_time:.2f} segundos")
+        data = pool.map(get_historical_data_parallel_wrapper, tickers)
     end_time = time.time()
     print(f"Tempo total de execução: {end_time - start_time:.2f} segundos")
     return pd.concat(data, axis=0)
@@ -226,14 +195,12 @@ def main():
         wallet_br = merge_stock_info(wallet_br, stock_info)
         historical_stock_price_br = get_all_historical_data_parallel(wallet_br['ticker_br'])
         end_time = time.time()
-        print(f"Tempo total de         execução: {end_time - start_time:.2f} segundos")
+        print(f"Tempo total de extração: {end_time - start_time:.2f} segundos")
 
         # Passo 3: Salvamento dos arquivos CSV e no BigQuery
         start_time = time.time()
-        save_to_local(wallet_br, wallet_br_path)
-        save_to_local(historical_stock_price_br, historical_stock_price_br_path)
-        persist_to_bigquery(wallet_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_wallet_br', credentials_path)
-        persist_to_bigquery(historical_stock_price_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_historical_stock_price_br', credentials_path)
+        persist_to_bigquery_and_local(wallet_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_wallet_br', wallet_br_path, credentials_path)
+        persist_to_bigquery_and_local(historical_stock_price_br, 'fluent-outpost-424800-h1.1_raw_Neoway_Capital_Market_Analytics.raw_historical_stock_price_br', historical_stock_price_br_path, credentials_path)
         end_time = time.time()
         print(f"Tempo total de persistência: {end_time - start_time:.2f} segundos")
 
