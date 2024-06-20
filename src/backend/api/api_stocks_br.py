@@ -8,7 +8,7 @@ from typing import List, Dict
 app = FastAPI()
 
 # Configuração da autenticação do GCP
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials_private_key_gbq/GBQ.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials/credentials_private_key_gbq/GBQ.json"
 credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 def load_from_bigquery(query: str, credentials_path: str) -> pd.DataFrame:
@@ -37,6 +37,17 @@ def get_silver_historical_stock_price_br():
     try:
         query = """
         SELECT * FROM `fluent-outpost-424800-h1.2_silver_Neoway_Capital_Market_Analytics.silver_historical_stock_price_br`
+        """
+        df = load_from_bigquery(query, credentials_path)
+        return df.to_dict(orient="records")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/silver_address_company_br", response_model=List[Dict])
+def get_silver_address_company_br():
+    try:
+        query = """
+        SELECT * FROM `fluent-outpost-424800-h1.2_silver_Neoway_Capital_Market_Analytics.silver_address_company_br`
         """
         df = load_from_bigquery(query, credentials_path)
         return df.to_dict(orient="records")

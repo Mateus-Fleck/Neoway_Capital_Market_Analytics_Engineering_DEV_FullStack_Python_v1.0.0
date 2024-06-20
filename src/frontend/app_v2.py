@@ -12,7 +12,7 @@ def get_absolute_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 # Configuração da autenticação do GCP
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "docs/credentials_private_key_gbq/fluent-outpost-424800-h1-81323e8da89e.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials/credentials_private_key_gbq/GBQ.json"
 credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 def get_bigquery_client():
